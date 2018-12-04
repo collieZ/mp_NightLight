@@ -2,6 +2,11 @@
   "navigationBarTitleText": "晚安",
   "usingComponents": {
     "i-button": "../../../static/dist/button/index",
-    "van-popup": "../../../static/vant/popup/index"
+    "van-popup": "../../../static/vant/popup/index",
+    "i-row": "../../../static/dist/row/index",
+    "i-col": "../../../static/dist/col/index",
+    "i-card": "../../../static/dist/card/index",
+    "van-slider": "../../../static/vant/slider/index",
+    "van-switch-cell": "../../../static/vant/switch-cell/index"
   }
 }

@@ -11,6 +11,7 @@
 	"compileType": "miniprogram",
 	"appid": "touristappid",
 	"projectname": "mpvueble",
+	"libVersion": "2.4.1",
 	"condition": {
 		"search": {
 			"current": -1,

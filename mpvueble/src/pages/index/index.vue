@@ -1,6 +1,6 @@
 <template>
   <div class="container" @click="clickHandle('test click', $event)">
-    <div class="userinfo" @click="bindViewTap">
+    <div class="userinfo">
       <img
         class="userinfo-avatar"
         v-if="userInfo.avatarUrl"
@@ -15,10 +15,11 @@
     <i-button type="info" @click="openBluetoothAdapter">蓝牙测试</i-button>
     <i-button type="primary" @click="listBLEDevice">查看搜寻的蓝牙</i-button>
     <i-button type="info" @click="showBLE">蓝牙弹出层</i-button>
-    <i-button v-if="BLE.canWrite" type="info" @click="writeBLECharacteristicValue">写数据</i-button>
-
+    <!-- <i-button v-if="BLE.canWrite" type="info" @click="writeBLECharacteristicValue()">写数据</i-button> -->
+    <i-button v-if="BLE.connected" type="primary" @click="showBLEControl">展开控制台</i-button>
 
     <van-popup :show="popupShow" position="right" @close="onPopupClose" :custom-class="popupRight">
+      <i-button type="ghost" :size="'small'" :inline="true" @click="closePopup">关闭</i-button>
       <div
         v-for="(device, index) in allDevices"
         @click="createBLEConnection"
@@ -27,9 +28,39 @@
         :data-name="device.name"
         :data-device-id="device.deviceId"
       >
-        <div>name: {{device.name}}</div>
-        <div>deviceId: {{device.deviceId}}</div>
-        <div>RSSI: {{device.RSSI}}</div>
+        <i-card
+          :extra="(device.deviceId == BLE.deviceId && BLE.connected) ? '已连接' : '未连接'"
+          :full="true"
+          :thumb="(BLE.connected && device.deviceId==BLE.deviceId) ? devicePicUrl.link : devicePicUrl.unlink"
+        >
+          <view slot="content">
+            <div>name: {{device.name}}</div>
+            <div>deviceId: {{device.deviceId}}</div>
+            <div>RSSI: {{device.RSSI}}</div>
+          </view>
+          <view slot="footer" v-if="(device.deviceId == BLE.deviceId && BLE.connected)">
+            <i-button
+              type="ghost"
+              :size="'small'"
+              shape="circle"
+              :i-class="'disConnectBtn'"
+              :inline="true"
+              @click.stop="closeBLEConnection"
+            >断开连接</i-button>
+          </view>
+        </i-card>
+      </div>
+    </van-popup>
+
+    <van-popup
+      :show="controlPopupShow"
+      position="left"
+      @close="onControlPopupClose"
+      :custom-class="popupLeft"
+    >
+      <i-button type="ghost" :size="'small'" :inline="true" @click="closeControlPopup">关闭</i-button>
+      <div>
+        <van-slider value="50" @change="onSliderChange" min="0" max="100" bar-height="4px"/>
       </div>
     </van-popup>
   </div>
@@ -45,6 +76,10 @@ export default {
     return {
       userInfo: {},
       // 蓝牙变量
+      devicePicUrl: {
+        unlink: "https://i.loli.net/2018/12/04/5c0623e49b6eb.png",
+        link: "https://i.loli.net/2018/12/04/5c0629bf138cb.png"
+      },
       allDevices: [],
       chs: [],
       BLE: {
@@ -58,6 +93,8 @@ export default {
       _discoveryStarted: false, // 蓝牙搜寻全局变量
       // UI变量
       popupShow: false,
+      controlPopupShow: false,
+      popupLeft: "popupLeft",
       popupRight: "popupRight"
     };
   },
@@ -67,20 +104,6 @@ export default {
   },
 
   methods: {
-    bindViewTap() {
-      const url = "../logs/main";
-      wx.navigateTo({ url });
-    },
-    listBLEDevice() {
-      console.log("搜寻到的蓝牙有: ", this.allDevices);
-    },
-    onPopupClose() {
-      console.log("popup关闭");
-      this.popupShow = false;
-    },
-    showBLE() {
-      this.popupShow = true;
-    },
     getUserInfo() {
       // 调用登录接口
       wx.login({
@@ -92,6 +115,34 @@ export default {
           });
         }
       });
+    },
+    listBLEDevice() {
+      console.log("搜寻到的蓝牙有: ", this.allDevices);
+    },
+    // UI交互事件
+    onPopupClose() {
+      this.popupShow = false;
+    },
+    onControlPopupClose() {
+      this.controlPopupShow = false;
+    },
+    closePopup() {
+      this.popupShow = false;
+    },
+    closeControlPopup() {
+      this.controlPopupShow = false;
+    },
+    showBLE() {
+      this.popupShow = true;
+    },
+    showBLEControl() {
+      this.controlPopupShow = true;
+    },
+    onSliderChange(e) {
+      let brightnessLabel = this.hexStringToNumber('A')
+      let sendStrArr = [brightnessLabel, e.mp.detail]
+      console.log(sendStrArr)
+      this.writeBLECharacteristicValue(sendStrArr)
     },
     // ==================== 蓝牙搜寻操作 =================
     /**
@@ -238,7 +289,8 @@ export default {
               _BLE.deviceId = deviceId;
               _BLE.serviceId = serviceId;
               _BLE.characteristicId = item.uuid;
-              this.writeBLECharacteristicValue();
+              let testbuffer = [0, 16, 64, 100]
+              this.writeBLECharacteristicValue(testbuffer);
             }
             // 该特征值是否支持通知或者指示
             if (item.properties.notify || item.properties.indicate) {
@@ -272,12 +324,16 @@ export default {
     },
     /**
      *  @description 向BLE设备写16进制数据
-     *
+     *  @param {Array} 要发送的数据 数组 
      * */
-    writeBLECharacteristicValue: function() {
-      let buffer = new ArrayBuffer(1); // 生成一字节的类型化数组
+    writeBLECharacteristicValue: function(val) {
+      let bufferLength = val.length
+      let buffer = new ArrayBuffer(bufferLength); // 生成一字节的类型化数组
       let dataView = new DataView(buffer); // 转换成数组视图
-      dataView.setUint8(0, 0); // 写入内存,从第一个字节开始
+      for(let i = 0; i < val.length; i++) {
+        dataView.setUint8(i, val[i]); // 写入内存,从第一个字节开始
+      }
+      console.log(dataView)
       wx.writeBLECharacteristicValue({
         deviceId: this.BLE.deviceId,
         serviceId: this.BLE.serviceId,
@@ -297,14 +353,41 @@ export default {
     /**
      *  @description 关闭当前蓝牙连接
      * */
-    closeBLEConnection: function () {
+    closeBLEConnection: function() {
       wx.closeBLEConnection({
         deviceId: this.BLE.deviceId
-      })
-      let _BLE = this.BLE
-      _BLE.connected = false
-      _BLE.canWrite = false
-      this.chs = []
+      });
+      let _BLE = this.BLE;
+      _BLE.connected = false;
+      _BLE.canWrite = false;
+      this.chs = [];
+    },
+    /**
+     *  @description str -> hex Arraybuffer
+     * */
+    hexStringToArrayBuffer(str) {
+      if (!str) {
+        return new ArrayBuffer(0);
+      }
+      var buffer = new ArrayBuffer(str.length);
+      let dataView = new DataView(buffer);
+      let ind = 0;
+      for (let i = 0, len = str.length; i < len; i += 2) {
+        let code = parseInt(str.substr(i, 2), 16);
+        dataView.setUint8(ind, code);
+        ind++;
+      }
+      return buffer;
+    },
+    /**
+     *  @description str -> hex number
+     * */
+    hexStringToNumber(str) {
+      if (!str) {
+        return 0;
+      }
+      let hexnumber = parseInt(str, 16)
+      return hexnumber;
     },
 
     clickHandle(msg, ev) {
@@ -359,14 +442,17 @@ export default {
 .device_list {
   width: 100%;
   height: auto;
-  border: darkseagreen;
-  background-color: rgba(226, 225, 225, 0.918);
-  margin-bottom: 10rpx;
+  margin-top: 30rpx;
 }
 
-.popupRight {
+.popupRight,
+.popupLeft {
   width: 80% !important;
   height: 100% !important;
   padding: 20px;
+}
+
+.disConnectBtn {
+  margin: 0 !important;
 }
 </style>
