@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "晚安",
+  "usingComponents": {
+    "i-button": "../../../static/dist/button/index",
+    "van-popup": "../../../static/vant/popup/index"
+  }
+}

@@ -1,0 +1,372 @@
+<template>
+  <div class="container" @click="clickHandle('test click', $event)">
+    <div class="userinfo" @click="bindViewTap">
+      <img
+        class="userinfo-avatar"
+        v-if="userInfo.avatarUrl"
+        :src="userInfo.avatarUrl"
+        background-size="cover"
+      >
+      <div class="userinfo-nickname">
+        <card :text="userInfo.nickName"></card>
+      </div>
+    </div>
+    <!-- <a href="/pages/counter/main" class="counter">去往Vuex示例页面</a> -->
+    <i-button type="info" @click="openBluetoothAdapter">蓝牙测试</i-button>
+    <i-button type="primary" @click="listBLEDevice">查看搜寻的蓝牙</i-button>
+    <i-button type="info" @click="showBLE">蓝牙弹出层</i-button>
+    <i-button v-if="BLE.canWrite" type="info" @click="writeBLECharacteristicValue">写数据</i-button>
+
+
+    <van-popup :show="popupShow" position="right" @close="onPopupClose" :custom-class="popupRight">
+      <div
+        v-for="(device, index) in allDevices"
+        @click="createBLEConnection"
+        :key="index"
+        :class="{device_list: true}"
+        :data-name="device.name"
+        :data-device-id="device.deviceId"
+      >
+        <div>name: {{device.name}}</div>
+        <div>deviceId: {{device.deviceId}}</div>
+        <div>RSSI: {{device.RSSI}}</div>
+      </div>
+    </van-popup>
+  </div>
+</template>
+
+<script>
+import card from "@/components/card";
+import { inArray } from "@/utils/index";
+import { ab2hex } from "@/utils/index";
+
+export default {
+  data() {
+    return {
+      userInfo: {},
+      // 蓝牙变量
+      allDevices: [],
+      chs: [],
+      BLE: {
+        connected: false,
+        name: "",
+        deviceId: "",
+        serviceId: "",
+        characteristicId: "",
+        canWrite: false
+      },
+      _discoveryStarted: false, // 蓝牙搜寻全局变量
+      // UI变量
+      popupShow: false,
+      popupRight: "popupRight"
+    };
+  },
+
+  components: {
+    card
+  },
+
+  methods: {
+    bindViewTap() {
+      const url = "../logs/main";
+      wx.navigateTo({ url });
+    },
+    listBLEDevice() {
+      console.log("搜寻到的蓝牙有: ", this.allDevices);
+    },
+    onPopupClose() {
+      console.log("popup关闭");
+      this.popupShow = false;
+    },
+    showBLE() {
+      this.popupShow = true;
+    },
+    getUserInfo() {
+      // 调用登录接口
+      wx.login({
+        success: () => {
+          wx.getUserInfo({
+            success: res => {
+              this.userInfo = res.userInfo;
+            }
+          });
+        }
+      });
+    },
+    // ==================== 蓝牙搜寻操作 =================
+    /**
+     *  @description 初始化蓝牙适配器，并准备搜索
+     * */
+    openBluetoothAdapter: function() {
+      wx.openBluetoothAdapter({
+        success: res => {
+          console.log("openBluetoothAdapter success", res);
+          this.startBluetoothDevicesDiscovery(); // 搜寻设备
+        },
+        fail: res => {
+          if (res.errCode === 10001) {
+            // 提示检查蓝牙是否可用
+            wx.onBluetoothAdapterStateChange(function(res) {
+              console.log("onBluetoothAdapterStateChange", res);
+              if (res.available) {
+                this.startBluetoothDevicesDiscovery(); // 搜寻设备
+              }
+            });
+          }
+        }
+      });
+    },
+    /**
+     *  @description 开始搜索周围BLE
+     * */
+    startBluetoothDevicesDiscovery: function() {
+      if (this._discoveryStarted) {
+        return;
+      }
+      this._discoveryStarted = true;
+      wx.startBluetoothDevicesDiscovery({
+        allowDuplicatesKey: true, // 允许重复上报同一设备
+        success: res => {
+          console.log("startBluetoothDevicesDiscovery success", res);
+          this.onBluetoothDeviceFound();
+        }
+      });
+    },
+    /**
+     *  @description 监听BLE搜寻结果
+     * */
+    onBluetoothDeviceFound: function() {
+      wx.onBluetoothDeviceFound(res => {
+        res.devices.forEach(device => {
+          if (!device.name && !device.localName) {
+            return;
+          }
+          const foundDevices = this.allDevices; // 所有找到的device列表
+          // 返回的deviceid在现有数组中的索引，没有则返回-1
+          const idx = inArray(foundDevices, "deviceId", device.deviceId);
+          // const data = {};
+          if (idx === -1) {
+            // 将新发现的设备device对象写入对象
+            let index = foundDevices.length; // 直接使用索引更新不起效
+            this.allDevices.splice(index, 1, device);
+          } else {
+            // 更新之前有的对象值
+            this.allDevices.splice(idx, 1, device);
+          }
+        });
+      });
+    },
+    /**
+     *  @description 停止适配器搜索，节省开销
+     * */
+    stopBluetoothDevicesDiscovery: function() {
+      wx.stopBluetoothDevicesDiscovery();
+    },
+    /**
+     *  @description 监听BLE搜寻结果
+     * */
+    createBLEConnection: function(e) {
+      const ds = e.currentTarget.dataset;
+      const deviceId = ds.deviceId;
+      const name = ds.name;
+      wx.createBLEConnection({
+        deviceId,
+        success: res => {
+          let _BLE = this.BLE;
+          _BLE.connected = true;
+          _BLE.name = name;
+          _BLE.deviceId = deviceId;
+          this.getBLEDeviceServices(deviceId); // 获取设备服务列表
+          console.log("连接蓝牙信息: ", this.BLE);
+        }
+      });
+      this.stopBluetoothDevicesDiscovery(); // 关闭蓝牙搜寻，节省资源
+    },
+    /**
+     *  @description 获取BLE服务列表fn
+     * @param {deviceId: String} BLE设备ID
+     * */
+    getBLEDeviceServices: function(deviceId) {
+      wx.getBLEDeviceServices({
+        deviceId,
+        success: res => {
+          console.log("该设备的服务有： ", res.services);
+          for (let i = 0; i < res.services.length; i++) {
+            if (res.services[i].isPrimary) {
+              // 是否为主服务
+              // 获取BLE该服务特征值characteristics
+              this.getBLEDeviceCharacteristics(deviceId, res.services[i].uuid);
+              return;
+            }
+          }
+        }
+      });
+    },
+    /**
+     *  @description 获取BLE服务特征值
+     *  @param {deviceId: String} BLE设备ID
+     *  @param {serviceId: String} BLE设备服务ID
+     * */
+    getBLEDeviceCharacteristics: function(deviceId, serviceId) {
+      wx.getBLEDeviceCharacteristics({
+        deviceId,
+        serviceId,
+        success: res => {
+          console.log(
+            "getBLEDeviceCharacteristics success",
+            res.characteristics
+          );
+          // 遍历主服务中的每个特征值
+          for (let i = 0; i < res.characteristics.length; i++) {
+            let item = res.characteristics[i];
+            if (item.properties.read) {
+              // 如果可读
+              // 读取该特征值的属性信息，在Valchange回调中取得读取的值
+              console.log("BLE can read!!!!!");
+              wx.readBLECharacteristicValue({
+                deviceId,
+                serviceId,
+                characteristicId: item.uuid // 特征值的uuid
+              });
+            }
+            // 如果可写
+            if (item.properties.write) {
+              console.log("BLE can write!!!!!");
+              let _BLE = this.BLE;
+              _BLE.canWrite = true;
+              // 将可写设备的设备id 服务id 特征值id记录，并启动写操作
+              _BLE.deviceId = deviceId;
+              _BLE.serviceId = serviceId;
+              _BLE.characteristicId = item.uuid;
+              this.writeBLECharacteristicValue();
+            }
+            // 该特征值是否支持通知或者指示
+            if (item.properties.notify || item.properties.indicate) {
+              wx.notifyBLECharacteristicValueChange({
+                deviceId,
+                serviceId,
+                characteristicId: item.uuid,
+                state: true // 是否启用notify
+              });
+            }
+          }
+        },
+        fail(res) {
+          console.error("getBLEDeviceCharacteristics", res);
+        }
+      });
+      // 操作之前先监听，保证第一时间获取数据
+      wx.onBLECharacteristicValueChange(characteristic => {
+        const idx = inArray(this.chs, "uuid", characteristic.characteristicId);
+        if (idx === -1) {
+          let index = this.chs.length;
+          var BLECharacteristicVal = {
+            uuid: characteristic.characteristicId,
+            value: ab2hex(characteristic.value)
+          };
+          this.chs.splice(index, 1, BLECharacteristicVal);
+        } else {
+          this.chs.splice(idx, 1, BLECharacteristicVal);
+        }
+      });
+    },
+    /**
+     *  @description 向BLE设备写16进制数据
+     *
+     * */
+    writeBLECharacteristicValue: function() {
+      let buffer = new ArrayBuffer(1); // 生成一字节的类型化数组
+      let dataView = new DataView(buffer); // 转换成数组视图
+      dataView.setUint8(0, 0); // 写入内存,从第一个字节开始
+      wx.writeBLECharacteristicValue({
+        deviceId: this.BLE.deviceId,
+        serviceId: this.BLE.serviceId,
+        characteristicId: this.BLE.characteristicId,
+        value: buffer,
+        success: res => {
+          console.log("写入成功", res);
+        }
+      });
+    },
+    /**
+     *  @description 关闭蓝牙适配器
+     * */
+    closeBluetoothAdapter: function() {
+      wx.closeBluetoothAdapter();
+    },
+    /**
+     *  @description 关闭当前蓝牙连接
+     * */
+    closeBLEConnection: function () {
+      wx.closeBLEConnection({
+        deviceId: this.BLE.deviceId
+      })
+      let _BLE = this.BLE
+      _BLE.connected = false
+      _BLE.canWrite = false
+      this.chs = []
+    },
+
+    clickHandle(msg, ev) {
+      // console.log("clickHandle:", msg, ev);
+    }
+  },
+
+  created() {
+    // 调用应用实例的方法获取全局数据
+    this.getUserInfo();
+  }
+};
+</script>
+
+<style>
+.userinfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.userinfo-avatar {
+  width: 128rpx;
+  height: 128rpx;
+  margin: 20rpx;
+  border-radius: 50%;
+}
+
+.userinfo-nickname {
+  color: #aaa;
+}
+
+.usermotto {
+  margin-top: 150px;
+}
+
+.form-control {
+  display: block;
+  padding: 0 12px;
+  margin-bottom: 5px;
+  border: 1px solid #ccc;
+}
+
+.counter {
+  display: inline-block;
+  margin: 10px auto;
+  padding: 5px 10px;
+  color: blue;
+  border: 1px solid blue;
+}
+
+.device_list {
+  width: 100%;
+  height: auto;
+  border: darkseagreen;
+  background-color: rgba(226, 225, 225, 0.918);
+  margin-bottom: 10rpx;
+}
+
+.popupRight {
+  width: 80% !important;
+  height: 100% !important;
+  padding: 20px;
+}
+</style>
