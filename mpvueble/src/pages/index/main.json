@@ -7,6 +7,8 @@
     "i-col": "../../../static/dist/col/index",
     "i-card": "../../../static/dist/card/index",
     "van-slider": "../../../static/vant/slider/index",
-    "van-switch-cell": "../../../static/vant/switch-cell/index"
+    "van-switch-cell": "../../../static/vant/switch-cell/index",
+    "van-switch": "../../../static/vant/switch/index",
+    "i-divider": "../../../static/dist/divider/index"
   }
 }

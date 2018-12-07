@@ -19,7 +19,7 @@
     <i-button v-if="BLE.connected" type="primary" @click="showBLEControl">展开控制台</i-button>
 
     <van-popup :show="popupShow" position="right" @close="onPopupClose" :custom-class="popupRight">
-      <i-button type="ghost" :size="'small'" :inline="true" @click="closePopup">关闭</i-button>
+      <i-button type="ghost" :size="'small'" shape="circle" :inline="true" @click="closePopup">关闭</i-button>
       <div
         v-for="(device, index) in allDevices"
         @click="createBLEConnection"
@@ -58,9 +58,30 @@
       @close="onControlPopupClose"
       :custom-class="popupLeft"
     >
-      <i-button type="ghost" :size="'small'" :inline="true" @click="closeControlPopup">关闭</i-button>
+      <div class="colHeader">
+        <i-button
+          type="ghost"
+          :size="'small'"
+          shape="circle"
+          :inline="true"
+          @click="closeControlPopup"
+        >关闭</i-button>
+      </div>
+      <i-divider color="#2d8cf0" lineColor="#2d8cf0"></i-divider>
       <div>
-        <van-slider value="50" @change="onSliderChange" min="0" max="100" bar-height="4px"/>
+        <van-switch-cell title="开关" :checked="isLightOpen" @change="onlightStatusChange"/>
+      </div>
+      <div class="sliderControl">
+        <div>
+          <span>光亮控制</span>
+        </div>
+        <van-slider value="50" @change="onLightSliderChange" min="0" max="100" bar-height="4px"/>
+      </div>
+      <div class="sliderControl">
+        <div>
+          <span>光色控制</span>
+        </div>
+        <van-slider value="50" @change="onColorSliderChange" min="0" max="100" bar-height="4px"/>
       </div>
     </van-popup>
   </div>
@@ -95,14 +116,23 @@ export default {
       popupShow: false,
       controlPopupShow: false,
       popupLeft: "popupLeft",
-      popupRight: "popupRight"
+      popupRight: "popupRight",
+      isLightOpen: false
     };
   },
-
   components: {
     card
   },
-
+  watch: {
+    "BLE.connected": {
+      handler: function(newVal, oldVal) {
+        console.log(newVal, oldVal);
+        if (newVal && !oldVal) {
+        }
+      },
+      deep: true
+    }
+  },
   methods: {
     getUserInfo() {
       // 调用登录接口
@@ -138,11 +168,32 @@ export default {
     showBLEControl() {
       this.controlPopupShow = true;
     },
-    onSliderChange(e) {
-      let brightnessLabel = this.hexStringToNumber('A')
-      let sendStrArr = [brightnessLabel, e.mp.detail]
-      console.log(sendStrArr)
-      this.writeBLECharacteristicValue(sendStrArr)
+    // 台灯开关的控制
+    onlightStatusChange(e) {
+      this.isLightOpen = e.mp.detail;
+      var brightnessLabel = this.hexStringToNumber("C");
+      if (e.mp.detail) {
+        let sendStrArr = [brightnessLabel, 1];
+        this.writeBLECharacteristicValue(sendStrArr);
+      } else {
+        let sendStrArr = [brightnessLabel, 0]
+        this.writeBLECharacteristicValue(sendStrArr);
+      }
+      
+    },
+    // 亮度控制
+    onLightSliderChange(e) {
+      let brightnessLabel = this.hexStringToNumber("A");
+      let sendStrArr = [brightnessLabel, e.mp.detail];
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
+    },
+    // 光色控制
+    onColorSliderChange(e) {
+      let brightnessLabel = this.hexStringToNumber("B");
+      let sendStrArr = [brightnessLabel, e.mp.detail];
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
     },
     // ==================== 蓝牙搜寻操作 =================
     /**
@@ -289,7 +340,7 @@ export default {
               _BLE.deviceId = deviceId;
               _BLE.serviceId = serviceId;
               _BLE.characteristicId = item.uuid;
-              let testbuffer = [0, 16, 64, 100]
+              let testbuffer = [0, 16, 64, 100];
               this.writeBLECharacteristicValue(testbuffer);
             }
             // 该特征值是否支持通知或者指示
@@ -324,16 +375,15 @@ export default {
     },
     /**
      *  @description 向BLE设备写16进制数据
-     *  @param {Array} 要发送的数据 数组 
+     *  @param {Array} 要发送的数据 数组
      * */
     writeBLECharacteristicValue: function(val) {
-      let bufferLength = val.length
+      let bufferLength = val.length;
       let buffer = new ArrayBuffer(bufferLength); // 生成一字节的类型化数组
       let dataView = new DataView(buffer); // 转换成数组视图
-      for(let i = 0; i < val.length; i++) {
+      for (let i = 0; i < val.length; i++) {
         dataView.setUint8(i, val[i]); // 写入内存,从第一个字节开始
       }
-      console.log(dataView)
       wx.writeBLECharacteristicValue({
         deviceId: this.BLE.deviceId,
         serviceId: this.BLE.serviceId,
@@ -386,7 +436,7 @@ export default {
       if (!str) {
         return 0;
       }
-      let hexnumber = parseInt(str, 16)
+      let hexnumber = parseInt(str, 16);
       return hexnumber;
     },
 
@@ -395,6 +445,7 @@ export default {
     }
   },
 
+  // ====== 生命周期钩子函数 ======
   created() {
     // 调用应用实例的方法获取全局数据
     this.getUserInfo();
@@ -445,14 +496,29 @@ export default {
   margin-top: 30rpx;
 }
 
-.popupRight,
-.popupLeft {
+.popupRight {
   width: 80% !important;
   height: 100% !important;
-  padding: 20px;
+  padding: 10px;
+}
+
+.popupLeft {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 10px;
 }
 
 .disConnectBtn {
   margin: 0 !important;
+}
+
+.sliderControl {
+  margin-top: 30rpx;
+}
+
+.colHeader {
+  width: 100%;
+  height: auto;
+  margin-bottom: 10rpx;
 }
 </style>
