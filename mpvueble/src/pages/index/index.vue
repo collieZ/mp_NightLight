@@ -67,23 +67,43 @@
           @click="closeControlPopup"
         >关闭</i-button>
       </div>
-      <i-divider color="#2d8cf0" lineColor="#2d8cf0"></i-divider>
-      <div>
+      <i-divider color="#2d8cf0" lineColor="#C2C0C0"></i-divider>
+      <div class="powerSwitch">
         <van-switch-cell title="开关" :checked="isLightOpen" @change="onlightStatusChange"/>
       </div>
       <div class="sliderControl">
-        <div>
+        <div class="slideTitle">
           <span>光亮控制</span>
         </div>
         <van-slider value="50" @change="onLightSliderChange" min="0" max="100" bar-height="4px"/>
       </div>
       <div class="sliderControl">
-        <div>
+        <div class="slideTitle">
           <span>光色控制</span>
         </div>
         <van-slider value="50" @change="onColorSliderChange" min="0" max="100" bar-height="4px"/>
       </div>
+      <div class="breathLight">
+        <img
+          :src="breathLight.active"
+          @click="breathHandle"
+          v-if="!breathLight.isshaking"
+          alt="呼吸灯开启"
+          srcset
+        >
+        <img
+          :src="breathLight.unactive"
+          v-else
+          @click="breathHandle"
+          alt="呼吸灯关闭"
+          srcset
+        >
+      </div>
     </van-popup>
+    <!-- <i-button type="info" shape="circle" @click="toastTest">提示测试</i-button> -->
+    <van-toast id="openTips"/>
+    <van-toast id="breathLightTips"/>
+    <van-toast id="breathLightClose"/>
   </div>
 </template>
 
@@ -91,6 +111,7 @@
 import card from "@/components/card";
 import { inArray } from "@/utils/index";
 import { ab2hex } from "@/utils/index";
+import Toast from "../../../static/vant/toast/toast";
 
 export default {
   data() {
@@ -100,6 +121,13 @@ export default {
       devicePicUrl: {
         unlink: "https://i.loli.net/2018/12/04/5c0623e49b6eb.png",
         link: "https://i.loli.net/2018/12/04/5c0629bf138cb.png"
+      },
+      // 呼吸状态变量
+      breathLightStatus: '',
+      breathLight: {
+        active: "https://i.loli.net/2018/12/10/5c0e162aab42c.png",
+        unactive: "https://i.loli.net/2018/12/10/5c0e19cd9ca8a.png",
+        isshaking: false
       },
       allDevices: [],
       chs: [],
@@ -123,6 +151,18 @@ export default {
   components: {
     card
   },
+  computed: {
+    breathLightStatus() {
+      let BL = this.breathLight
+      if (!BL.isshaking) {
+        const url = require(`${BL.active}`)
+        console.log('url is : ', url)
+        return url;
+      } else {
+        return require(`${BL.unactive}`)
+      }
+    }
+  },
   watch: {
     "BLE.connected": {
       handler: function(newVal, oldVal) {
@@ -134,6 +174,27 @@ export default {
     }
   },
   methods: {
+    toastConnect() {
+      const toast = Toast.success({
+        selector: "#openTips",
+        message: "连接成功",
+        duration: 1000 // 持续展示 toast
+      });
+    },
+    toastBreathLight() {
+      const toast = Toast.success({
+        selector: "#breathLightTips",
+        message: "开启呼吸灯",
+        duration: 1000 // 持续展示 toast
+      });
+    },
+    toastBreathLightClose() {
+      const toast = Toast.success({
+        selector: "#breathLightClose",
+        message: "关闭呼吸灯",
+        duration: 1000 // 持续展示 toast
+      });
+    },
     getUserInfo() {
       // 调用登录接口
       wx.login({
@@ -176,10 +237,9 @@ export default {
         let sendStrArr = [brightnessLabel, 1];
         this.writeBLECharacteristicValue(sendStrArr);
       } else {
-        let sendStrArr = [brightnessLabel, 0]
+        let sendStrArr = [brightnessLabel, 0];
         this.writeBLECharacteristicValue(sendStrArr);
       }
-      
     },
     // 亮度控制
     onLightSliderChange(e) {
@@ -190,10 +250,28 @@ export default {
     },
     // 光色控制
     onColorSliderChange(e) {
-      let brightnessLabel = this.hexStringToNumber("B");
-      let sendStrArr = [brightnessLabel, e.mp.detail];
+      let brightColorLabel = this.hexStringToNumber("B");
+      let sendStrArr = [brightColorLabel, e.mp.detail];
       console.log(sendStrArr);
       this.writeBLECharacteristicValue(sendStrArr);
+    },
+    // 呼吸功能控制
+    breathHandle() {
+      let brightfnLabel = this.hexStringToNumber("D");
+      let sendStrArr = [brightfnLabel, 0x01];
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
+      let breathObj = this.breathLight
+      console.log(breathObj)
+      if (!breathObj.isshaking) {
+        breathObj.isshaking = true;
+        this.toastBreathLight();
+        console.log('开启：', breathObj.isshaking)
+      } else {
+        breathObj.isshaking = false;
+        this.toastBreathLightClose();
+        console.log('关闭:  ', breathObj.isshaking)
+      }
     },
     // ==================== 蓝牙搜寻操作 =================
     /**
@@ -280,6 +358,10 @@ export default {
           _BLE.deviceId = deviceId;
           this.getBLEDeviceServices(deviceId); // 获取设备服务列表
           console.log("连接蓝牙信息: ", this.BLE);
+          this.toastConnect();
+          setTimeout(() => {
+            this.popupShow = false;
+          }, 3000);
         }
       });
       this.stopBluetoothDevicesDiscovery(); // 关闭蓝牙搜寻，节省资源
@@ -512,13 +594,31 @@ export default {
   margin: 0 !important;
 }
 
-.sliderControl {
-  margin-top: 30rpx;
-}
-
 .colHeader {
   width: 100%;
   height: auto;
-  margin-bottom: 10rpx;
+}
+
+.powerSwitch {
+  width: 100%;
+  height: auto;
+  border-bottom: 1px solid rgb(194, 192, 192);
+  margin-bottom: 50rpx;
+}
+
+.sliderControl {
+  width: 100%;
+  height: auto;
+  margin-bottom: 50rpx;
+}
+
+.slideTitle {
+  margin-bottom: 20rpx;
+}
+
+.breathLight {
+  width: 80%;
+  height: 300rpx;
+  margin: 10px auto;
 }
 </style>

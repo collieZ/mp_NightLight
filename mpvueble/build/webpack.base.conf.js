@@ -17,8 +17,8 @@ function getEntry (rootSrc) {
   glob.sync(rootSrc + '/pages/**/main.js')
     .forEach(file => {
       var key = relative(rootSrc, file).replace('.js', '')
-    map[key] = file
-  })
+      map[key] = file
+    })
   return map
 }
 
@@ -96,7 +96,7 @@ module.exports = {
         test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
         loader: 'url-loader',
         options: {
-          limit: 10000,
+          // limit: 10000,
           name: utils.assetsPath('fonts/[name].[ext]')
         }
       }
