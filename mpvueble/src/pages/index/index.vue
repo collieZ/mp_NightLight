@@ -15,6 +15,7 @@
     <i-button type="info" @click="openBluetoothAdapter">蓝牙测试</i-button>
     <i-button type="primary" @click="listBLEDevice">查看搜寻的蓝牙</i-button>
     <i-button type="info" @click="showBLE">蓝牙弹出层</i-button>
+    <i-button type="info" @click="showBLE">获取特征值</i-button>
     <!-- <i-button v-if="BLE.canWrite" type="info" @click="writeBLECharacteristicValue()">写数据</i-button> -->
     <i-button v-if="BLE.connected" type="primary" @click="showBLEControl">展开控制台</i-button>
 
@@ -91,13 +92,7 @@
           alt="呼吸灯开启"
           srcset
         >
-        <img
-          :src="breathLight.unactive"
-          v-else
-          @click="breathHandle"
-          alt="呼吸灯关闭"
-          srcset
-        >
+        <img :src="breathLight.unactive" v-else @click="breathHandle" alt="呼吸灯关闭" srcset>
       </div>
     </van-popup>
     <!-- <i-button type="info" shape="circle" @click="toastTest">提示测试</i-button> -->
@@ -112,6 +107,7 @@ import card from "@/components/card";
 import { inArray } from "@/utils/index";
 import { ab2hex } from "@/utils/index";
 import Toast from "../../../static/vant/toast/toast";
+import { setInterval } from 'timers';
 
 export default {
   data() {
@@ -123,7 +119,7 @@ export default {
         link: "https://i.loli.net/2018/12/04/5c0629bf138cb.png"
       },
       // 呼吸状态变量
-      breathLightStatus: '',
+      breathLightStatus: "",
       breathLight: {
         active: "https://i.loli.net/2018/12/10/5c0e162aab42c.png",
         unactive: "https://i.loli.net/2018/12/10/5c0e19cd9ca8a.png",
@@ -153,13 +149,13 @@ export default {
   },
   computed: {
     breathLightStatus() {
-      let BL = this.breathLight
+      let BL = this.breathLight;
       if (!BL.isshaking) {
-        const url = require(`${BL.active}`)
-        console.log('url is : ', url)
+        const url = require(`${BL.active}`);
+        console.log("url is : ", url);
         return url;
       } else {
-        return require(`${BL.unactive}`)
+        return require(`${BL.unactive}`);
       }
     }
   },
@@ -232,45 +228,45 @@ export default {
     // 台灯开关的控制
     onlightStatusChange(e) {
       this.isLightOpen = e.mp.detail;
-      var brightnessLabel = this.hexStringToNumber("C");
+      let brightnessLabel = this.hexStringToNumber("C");
       if (e.mp.detail) {
-        let sendStrArr = [brightnessLabel, 1];
+        let sendStrArr = [brightnessLabel, 1, 13, 10];
         this.writeBLECharacteristicValue(sendStrArr);
       } else {
-        let sendStrArr = [brightnessLabel, 0];
+        let sendStrArr = [brightnessLabel, 0, 13, 10];
         this.writeBLECharacteristicValue(sendStrArr);
       }
     },
     // 亮度控制
     onLightSliderChange(e) {
       let brightnessLabel = this.hexStringToNumber("A");
-      let sendStrArr = [brightnessLabel, e.mp.detail];
+      let sendStrArr = [brightnessLabel, e.mp.detail, 13, 10];
       console.log(sendStrArr);
       this.writeBLECharacteristicValue(sendStrArr);
+      this.breathLight.isshaking = false
     },
     // 光色控制
     onColorSliderChange(e) {
       let brightColorLabel = this.hexStringToNumber("B");
-      let sendStrArr = [brightColorLabel, e.mp.detail];
+      let sendStrArr = [brightColorLabel, e.mp.detail, 13, 10];
       console.log(sendStrArr);
       this.writeBLECharacteristicValue(sendStrArr);
+      this.breathLight.isshaking = false
     },
     // 呼吸功能控制
     breathHandle() {
-      let brightfnLabel = this.hexStringToNumber("D");
-      let sendStrArr = [brightfnLabel, 0x01];
-      console.log(sendStrArr);
-      this.writeBLECharacteristicValue(sendStrArr);
-      let breathObj = this.breathLight
-      console.log(breathObj)
+      let brightfnLabel = this.hexStringToNumber("AB");
+      let breathObj = this.breathLight;
       if (!breathObj.isshaking) {
         breathObj.isshaking = true;
+        let sendStrArr = [brightfnLabel, 1, 13, 10];
+        this.writeBLECharacteristicValue(sendStrArr);
         this.toastBreathLight();
-        console.log('开启：', breathObj.isshaking)
       } else {
         breathObj.isshaking = false;
+        let sendStrArr = [brightfnLabel, 0, 13, 10];
+        this.writeBLECharacteristicValue(sendStrArr);
         this.toastBreathLightClose();
-        console.log('关闭:  ', breathObj.isshaking)
       }
     },
     // ==================== 蓝牙搜寻操作 =================
@@ -422,8 +418,10 @@ export default {
               _BLE.deviceId = deviceId;
               _BLE.serviceId = serviceId;
               _BLE.characteristicId = item.uuid;
-              let testbuffer = [0, 16, 64, 100];
-              this.writeBLECharacteristicValue(testbuffer);
+              let testbuffer = [0];
+              setTimeout(() => {
+                this.writeBLECharacteristicValue(testbuffer);
+              }, 2000);
             }
             // 该特征值是否支持通知或者指示
             if (item.properties.notify || item.properties.indicate) {
@@ -431,7 +429,10 @@ export default {
                 deviceId,
                 serviceId,
                 characteristicId: item.uuid,
-                state: true // 是否启用notify
+                state: true, // 是否启用notify
+                success: res => {
+                  console.log('notify 启用成功', res)
+                }
               });
             }
           }
@@ -442,17 +443,20 @@ export default {
       });
       // 操作之前先监听，保证第一时间获取数据
       wx.onBLECharacteristicValueChange(characteristic => {
-        const idx = inArray(this.chs, "uuid", characteristic.characteristicId);
-        if (idx === -1) {
-          let index = this.chs.length;
-          var BLECharacteristicVal = {
-            uuid: characteristic.characteristicId,
-            value: ab2hex(characteristic.value)
-          };
-          this.chs.splice(index, 1, BLECharacteristicVal);
-        } else {
-          this.chs.splice(idx, 1, BLECharacteristicVal);
-        }
+        console.log('rec', characteristic)
+        // let idx = inArray(this.chs, "uuid", characteristic.characteristicId);
+        // console.log('bug 在上')
+        // if (idx === -1) {
+        //   let index = this.chs.length;
+        //   var BLECharacteristicVal = {
+        //     uuid: characteristic.characteristicId,
+        //     value: ab2hex(characteristic.value)
+        //   };
+        //   this.chs.splice(index, 1, BLECharacteristicVal);
+        // } else {
+        //   this.chs.splice (idx, 1, BLECharacteristicVal);
+        // }
+        console.log('value is:', ab2hex(characteristic.value))
       });
     },
     /**
