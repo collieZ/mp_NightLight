@@ -10,6 +10,9 @@
     "van-switch-cell": "../../../static/vant/switch-cell/index",
     "van-switch": "../../../static/vant/switch/index",
     "i-divider": "../../../static/dist/divider/index",
-    "van-toast": "../../../static/vant/toast/index"
+    "van-toast": "../../../static/vant/toast/index",
+    "van-icon": "../../../static/vant/icon/index",
+    "van-collapse": "../../../static/vant/collapse/index",
+    "van-collapse-item": "../../../static/vant/collapse-item/index"
   }
 }

@@ -11,12 +11,8 @@
         <card :text="userInfo.nickName"></card>
       </div>
     </div>
-    <!-- <a href="/pages/counter/main" class="counter">去往Vuex示例页面</a> -->
-    <i-button type="info" @click="openBluetoothAdapter">蓝牙测试</i-button>
-    <i-button type="primary" @click="listBLEDevice">查看搜寻的蓝牙</i-button>
+    <i-button type="info" @click="openBluetoothAdapter">蓝牙搜寻</i-button>
     <i-button type="info" @click="showBLE">蓝牙弹出层</i-button>
-    <i-button type="info" @click="showBLE">获取特征值</i-button>
-    <!-- <i-button v-if="BLE.canWrite" type="info" @click="writeBLECharacteristicValue()">写数据</i-button> -->
     <i-button v-if="BLE.connected" type="primary" @click="showBLEControl">展开控制台</i-button>
 
     <van-popup :show="popupShow" position="right" @close="onPopupClose" :custom-class="popupRight">
@@ -69,10 +65,47 @@
         >关闭</i-button>
       </div>
       <i-divider color="#2d8cf0" lineColor="#C2C0C0"></i-divider>
-      <div class="powerSwitch">
+      <i-button
+          type="ghost"
+          :size="'small'"
+          shape="circle"
+          :inline="true"
+          @click="addValue"
+        >增加</i-button>
+        <i-button
+          type="ghost"
+          :size="'small'"
+          shape="circle"
+          :inline="true"
+          @click="decValue"
+        >减少</i-button>
+        <i-button
+          type="ghost"
+          :size="'small'"
+          shape="circle"
+          :inline="true"
+          @click="updateValue"
+        >同步</i-button>
+        <div class="msgShow">
+          <van-icon name="setting" size="30px"/>
+          <span style="margin-left: 50%">设定值{{UltraSetVal}}</span>
+        </div>
+        <div class="msgShow">
+          <van-icon name="like" size="30px" color="	#C71585"/>
+          <span style="margin-left: 50%">实时距离{{distanceNow}}</span>
+        </div>
+        <div>
+          <ul>
+            <li v-for="(item, index) in threeInjectDisValArr" :key="index">
+              时间: {{item.time}}
+              距离: {{item.dis}}
+            </li>
+          </ul>
+        </div>
+      <!-- <div class="powerSwitch">
         <van-switch-cell title="开关" :checked="isLightOpen" @change="onlightStatusChange"/>
-      </div>
-      <div class="sliderControl">
+      </div> -->
+      <!-- <div class="sliderControl">
         <div class="slideTitle">
           <span>光亮控制</span>
         </div>
@@ -83,8 +116,8 @@
           <span>光色控制</span>
         </div>
         <van-slider value="50" @change="onColorSliderChange" min="0" max="100" bar-height="4px"/>
-      </div>
-      <div class="breathLight">
+      </div> -->
+      <!-- <div class="breathLight">
         <img
           :src="breathLight.active"
           @click="breathHandle"
@@ -93,7 +126,7 @@
           srcset
         >
         <img :src="breathLight.unactive" v-else @click="breathHandle" alt="呼吸灯关闭" srcset>
-      </div>
+      </div> -->
     </van-popup>
     <!-- <i-button type="info" shape="circle" @click="toastTest">提示测试</i-button> -->
     <van-toast id="openTips"/>
@@ -105,6 +138,7 @@
 <script>
 import card from "@/components/card";
 import { inArray } from "@/utils/index";
+import { formatTime } from "@/utils/index";
 import { ab2hex } from "@/utils/index";
 import Toast from "../../../static/vant/toast/toast";
 import { setInterval } from 'timers';
@@ -112,6 +146,11 @@ import { setInterval } from 'timers';
 export default {
   data() {
     return {
+      activeNames: ['1'],
+      // 超声波设定值
+      UltraSetVal: 50,
+      distanceNow: 1.2,
+      threeInjectDisValArr: [],
       userInfo: {},
       // 蓝牙变量
       devicePicUrl: {
@@ -170,6 +209,35 @@ export default {
     }
   },
   methods: {
+    collChange(e) {
+      console.log(e)
+    },
+    addValue() {
+      // 增加设定值
+      if(this.UltraSetVal >= 95) {
+        return;
+      }
+      let sendStrArr = [33, 34, 1, 13, 10];  // 0x21 0x22 0x01 0d 0a
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
+      this.UltraSetVal += 5
+    },
+    decValue() {
+      // 减少设定值
+      if (this.UltraSetVal <= 10) {
+        return;
+      }
+      let sendStrArr = [33, 34, 2, 13, 10];  // 0x21 0x22 0x02 0d 0a
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
+      this.UltraSetVal -= 5
+    },
+    updateValue() {
+      // 同步设定值
+      let sendStrArr = [33, 34, 3, 13, 10];  // 0x21 0x22 0x03 0d 0a
+      console.log(sendStrArr);
+      this.writeBLECharacteristicValue(sendStrArr);
+    },
     toastConnect() {
       const toast = Toast.success({
         selector: "#openTips",
@@ -457,6 +525,31 @@ export default {
         //   this.chs.splice (idx, 1, BLECharacteristicVal);
         // }
         console.log('value is:', ab2hex(characteristic.value))
+        let adjustBit = ab2hex(characteristic.value).substring(0, 2)
+        let disVal = ab2hex(characteristic.value).substring(2, 4)
+        if (adjustBit == '0b') {
+          console.log('是数据来了!!', disVal, parseInt(disVal, 16))
+          this.distanceNow = parseInt(disVal, 16)
+          if (this.distanceNow > this.UltraSetVal && this.distanceNow < 100) {
+            let detailList = {
+              dis: Number,
+              time: formatTime(new Date())
+            }
+            detailList.dis = this.distanceNow
+            if (this.threeInjectDisValArr.length >= 3) {
+              this.threeInjectDisValArr.shift()
+              this.threeInjectDisValArr.push(detailList)
+              console.log('详情显示数组！！：', this.threeInjectDisValArr)
+              return;
+            }
+            this.threeInjectDisValArr.push(detailList)
+          }
+          console.log('详情显示数组！！：', this.threeInjectDisValArr)
+        }
+        if(adjustBit == '0c') {
+          console.log('同步数据', disVal, parseInt(disVal, 16))
+          this.UltraSetVal = parseInt(disVal, 16)
+        }
       });
     },
     /**
@@ -624,5 +717,10 @@ export default {
   width: 80%;
   height: 300rpx;
   margin: 10px auto;
+}
+
+.msgShow {
+  margin-bottom: 2.5rem;
+  margin-top: 10px;
 }
 </style>
